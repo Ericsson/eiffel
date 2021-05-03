@@ -25,7 +25,7 @@ import string
 import shutil
 import time
 import getopt
-from jsonschema import validate
+from jsonschema import Draft4Validator, RefResolver
 
 def extractArchives():
   extractionPaths = []
@@ -91,14 +91,22 @@ def validateExamples(examples, schemas, maxExamples, shuffle):
 
   numChecked = 0
   latestReportTime = time.perf_counter()
-  
+  # Keys in schemas are $TYPE-$VERSION.
+  # All files are at ./$TYPE/$VERSION.json.
+  # Links from file to other file are always ../$OTHER_TYPE/$VERSION.json.
+  schema_store = {
+    "../" + key.replace("-", "/") + ".json": schemas[key] for key in schemas
+  }
+  resolver = RefResolver(None, referrer=None, store=schema_store)
+
   if shuffle:
     random.shuffle(examples)
   for path, type, version, id, json in examples:
     schemaKey = type + "-" + version
     if schemaKey in schemas:
       try:
-        validate(json, schemas[schemaKey])
+        validator = Draft4Validator(schemas[schemaKey], resolver=resolver)
+        validator.validate(json)
         numberOfSuccessfulValidations += 1
       except Exception as e:
         failures.append((path, type, id, e))
